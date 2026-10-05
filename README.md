@@ -92,7 +92,7 @@ Press **Ctrl + C** in the Ubuntu window to stop Z.O.E.
 Try these to see the built-in skills working:
 - `what is 12 * 7?`
 - `convert 20 celsius to fahrenheit`
-- `track order ORIS-1002`
+- `what is 15 percent of 80?`
 - `what is the weather in Cardiff?`
 
 ---
