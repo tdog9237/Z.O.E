@@ -20,7 +20,7 @@ using **GitFlow**, so your tutor can follow your progress on GitHub.
 | **Ollama** | A free program that runs AI models on your own computer | It runs Z.O.E's "brain" – the install script sets it up for you |
 | **Chrome or Edge** | Web browser | Z.O.E's screen is a web page; these browsers support the microphone and voice |
 
-About 8 GB of RAM and 6 GB of free disk space is recommended. A graphics card is **not** required.
+About 8 GB of RAM and 6 GB of free disk space is recommended. A dedicated graphics card is **highly recommended** (or required) for running the local AI model smoothly.
 
 ---
 
