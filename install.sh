@@ -43,7 +43,16 @@ python3 -m venv .venv
 pip install --upgrade pip -q
 pip install -r requirements.txt -q
 
-say "Step 5/5: Running the automated skill tests..."
+say "Step 5/6: Installing the WebRTC Avatar Renderer..."
+if [ ! -d "avatar-streamer" ]; then
+  git clone https://github.com/avaturn-live/avtr-1.git avatar-streamer
+  echo "Avatar streamer downloaded to 'avatar-streamer/'."
+  echo "Note: You will need 'pixi' installed to run the interactive-demo later."
+else
+  echo "Avatar streamer already exists."
+fi
+
+say "Step 6/6: Running the automated skill tests..."
 python3 test_skills.py
 
 say "All done! Start Z.O.E any time with:   bash start.sh"
