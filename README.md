@@ -70,7 +70,8 @@ This script:
 1. installs Python and other basic tools,
 2. installs **Ollama** and downloads Z.O.E's small, fast AI model (a few GB – be patient),
 3. creates a **virtual environment** (`.venv`) – a private folder of Python libraries just for this project,
-4. runs the automated tests to check everything works.
+4. downloads the **WebRTC photorealistic avatar streaming engine** (`avtr-1`),
+5. runs the automated tests to check everything works.
 
 You should finish with `OK` from the tests and **"All done!"**.
 
@@ -106,7 +107,7 @@ You type/speak ──► zoe_server.py ──► SkillManager checks every skill
                                         │
                                         └── no ──► the local AI model (Ollama) answers
                                                    ▼
-                              reply shown in chat + spoken aloud (Edge-TTS)
+                              reply shown in chat + photorealistic 3D avatar streamed via WebRTC
 ```
 
 | File / folder | What it does |
@@ -120,7 +121,7 @@ You type/speak ──► zoe_server.py ──► SkillManager checks every skill
 | `zoe_ui/` | The web page you see in the browser. |
 | `data/` | Face-recognition files. Your registered face is stored here and is **never** uploaded to GitHub. |
 
-**Edge-TTS** is a free text-to-speech library that turns Z.O.E's replies into a natural voice.
+**avtr-1 (WebRTC)** is a real-time neural avatar streaming engine that generates a photorealistic 3D face and voice for Z.O.E.
 **OpenCV** is a computer-vision library used to find and recognise faces in the webcam picture.
 
 ---
