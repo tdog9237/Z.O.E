@@ -169,8 +169,8 @@ def get_ollama_addr() -> Tuple[str, int]:
     return "127.0.0.1", 11434
 
 
-DEFAULT_MODEL = os.environ.get("ZOE_MODEL", "phi4-mini")
-PREFERRED_MODELS = [DEFAULT_MODEL, "phi4-mini", "phi3:mini", "phi3", "llama3.2:3b", "llama3.2:1b"]
+DEFAULT_MODEL = os.environ.get("ZOE_MODEL", "gemma3:270m")
+PREFERRED_MODELS = [DEFAULT_MODEL, "gemma3:270m", "smollm2:360m", "qwen2.5:1.5b", "llama3.2:1b", "phi4-mini", "llama3.2:3b"]
 
 
 def get_active_model() -> str:
