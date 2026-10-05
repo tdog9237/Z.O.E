@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Personal data - never commit your face or name to GitHub
+data/registered_face.png
+data/registered_name.txt
+
+# Secrets
+.env
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

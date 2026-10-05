@@ -1,0 +1,22 @@
+# Runs the skill tests automatically on every push and Pull Request.
+# The tutor sees a green tick (pass) or red cross (fail) on each PR.
+name: Skill Tests
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "release/**", "hotfix/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install libraries
+        run: pip install -r requirements.txt
+      - name: Run skill tests
+        run: python test_skills.py

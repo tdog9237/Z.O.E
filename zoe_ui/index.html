@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Z.O.E — Multimodal AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    :root {
+      --bg:#07070a; --surface:#0e0e13; --surface2:#171720;
+      --border:rgba(255,255,255,0.06); --accent:#8a2be2;
+      --accent2:#b388ff; --glow:rgba(138,43,226,0.3);
+      --text:#e2e4e9; --muted:#7f8295;
+    }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text);
+           height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+    header { display:flex; align-items:center; gap:14px; padding:14px 24px;
+             background:var(--surface); border-bottom:1px solid var(--border);
+             flex-shrink:0; z-index:10; }
+    #brand { display:flex; flex-direction:column; }
+    #brand div:first-child { font-size:26px; font-weight:bold; letter-spacing:1px; margin-bottom:2px; }
+    #brand div:last-child { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
+    #status-dot { width:8px;height:8px;border-radius:50%;background:#555;
+                  margin-left:auto;margin-right:4px;transition:background .5s; }
+    #status-dot.ready   { background:#4ade80;box-shadow:0 0 8px #4ade80; }
+    #status-dot.loading { background:#fbbf24;box-shadow:0 0 8px #fbbf24;animation:blink 1s step-end infinite; }
+    #status-dot.speaking { background:#7c6af7;box-shadow:0 0 12px #7c6af7;animation:blink .4s step-end infinite; }
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    #status-label { font-size:11px;color:var(--muted); }
+
+    #main { flex:1;display:flex;overflow:hidden; }
+
+    /* Avatar */
+    #avatar-panel {
+      width: 360px;
+      background: var(--surface2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow-y: auto;
+      position: relative;
+      flex-shrink: 0;
+      padding: 15px;
+    }
+    #avatar-panel::-webkit-scrollbar{width:3px;}
+    #avatar-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+    #three-canvas { border-radius:16px; }
+    #poly-state {
+      font-size:11px;color:var(--accent2);letter-spacing:2px;
+      text-transform:uppercase;font-weight:500;text-align:center;
+    }
+    .orbit-ring {
+      position:absolute; border-radius:50%; border:1px solid rgba(124,106,247,0.08);
+      pointer-events:none; animation:spin linear infinite;
+    }
+    .orbit-ring:nth-child(1){width:300px;height:300px;top:50%;left:50%;transform:translate(-50%,-50%);animation-duration:25s;}
+    .orbit-ring:nth-child(2){width:240px;height:240px;top:50%;left:50%;transform:translate(-50%,-50%);animation-duration:18s;animation-direction:reverse;}
+    @keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+    @keyframes spin-loader{to{transform:rotate(360deg)}}
+
+    #chat-panel { flex:1;display:flex;flex-direction:column;overflow:hidden; align-items:center; width:100%; background:var(--surface); }
+    #chat { flex:1;overflow-y:auto;padding:22px 20px;display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth; width:100%; max-width:800px; }
+    #chat::-webkit-scrollbar{width:3px;}
+    #chat::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+    .msg{display:flex;gap:16px;width:100%;animation:fadeUp .25s ease;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    .msg.user{align-self:flex-end;flex-direction:row-reverse;justify-content:flex-start;}
+    .msg.poly{align-self:flex-start;}
+    .msg-ico{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+    .msg.poly .msg-ico{background:linear-gradient(135deg,var(--accent),#c084fc);box-shadow:0 0 10px var(--glow);color:white;}
+    .msg.user .msg-ico{display:none;}
+    .bubble{padding:12px 16px;font-size:15px;line-height:1.6;}
+    .msg.poly .bubble{background:transparent;border:none;box-shadow:none;padding:5px 0;width:100%;}
+    .msg.user  .bubble{background:var(--surface2);border:none;border-radius:24px;box-shadow:none;padding:12px 20px;max-width:70%;}
+    .meta{font-size:10px;color:var(--muted);margin-top:4px;padding:0 4px;}
+    .msg.user .meta{text-align:right;display:none;}
+
+    .typing{display:flex;gap:5px;align-items:center;padding:12px 16px;
+            background:var(--surface2);border:1px solid var(--border);border-radius:16px;border-top-left-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,0.02);}
+    .typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:bounce 1.2s ease-in-out infinite;}
+    .typing span:nth-child(2){animation-delay:.2s} .typing span:nth-child(3){animation-delay:.4s}
+    @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px);background:var(--accent)}}
+
+    #input-area{padding:14px 20px 24px 20px;background:transparent;border:none;
+                display:flex;gap:10px;align-items:flex-end;flex-shrink:0;width:100%;max-width:800px;position:relative;}
+    #user-input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:20px;
+                padding:16px 22px;color:var(--text);font-family:'Inter',sans-serif;font-size:16px;
+                resize:none;min-height:64px;max-height:450px;overflow-y:hidden;outline:none;line-height:1.5;transition:border-color .2s;
+                box-shadow:0 4px 12px rgba(0,0,0,0.05);}
+    #user-input:focus{border-color:var(--border);box-shadow:0 4px 15px rgba(0,0,0,0.08);}
+    #user-input::placeholder{color:var(--muted);}
+    #send-btn{width:44px;height:44px;border-radius:50%;
+              background:linear-gradient(135deg,var(--accent),#c084fc);
+              border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+              font-size:17px;color:#fff;transition:transform .15s,box-shadow .15s;flex-shrink:0;}
+    #send-btn:hover{transform:scale(1.08);box-shadow:0 0 18px var(--glow);}
+    #send-btn:active{transform:scale(.95);}
+    #send-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+    .ctrl-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:10px;
+              padding:7px 12px;cursor:pointer;font-size:12px;font-family:'Inter',sans-serif;
+              transition:border-color .2s,color .2s;white-space:nowrap;}
+    .ctrl-btn:hover{border-color:var(--accent);color:var(--accent2);}
+    .ctrl-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(124,106,247,.1);}
+    #talk-btn{width:44px;height:44px;border-radius:50%;flex-shrink:0;
+              background:var(--surface2);border:2px solid var(--border);
+              cursor:pointer;display:flex;align-items:center;justify-content:center;
+              font-size:18px;color:var(--muted);transition:all .2s;position:relative;}
+    #talk-btn:hover{border-color:var(--accent);color:var(--accent2);}
+    #talk-btn.recording{border-color:#ef4444;color:#ef4444;background:rgba(239,68,68,.1);
+                         animation:rec-pulse 1s ease-in-out infinite;}
+    @keyframes rec-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.3)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
+    #mode-label{font-size:10px;color:var(--accent2);text-align:center;padding:2px 0 0 0;letter-spacing:1px;}
+
+    .welcome{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;}
+    .welcome h2{font-family:'Playfair Display',serif;font-style:italic;font-size:22px;color:var(--text);margin-bottom:8px;}
+    .suggestions{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-top:18px;}
+    .suggestion{background:var(--surface2);border:1px solid var(--border);border-radius:18px;
+                padding:7px 14px;font-size:12px;cursor:pointer;transition:border-color .2s,background .2s;}
+    .suggestion:hover{border-color:var(--accent);background:rgba(124,106,247,.1);}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-info" style="display:flex; align-items:center; width:330px;">
+    <div style="width: 330px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, rgba(138,43,226,0.35), rgba(0,229,255,0.25)); border: 1.5px solid var(--accent); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 14px var(--glow);">
+      <span style="font-family: 'Inter', system-ui, sans-serif; font-weight: 900; font-size: 22px; background: linear-gradient(135deg, #00E5FF, #B388FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 8px rgba(0,229,255,0.7)); letter-spacing: 4px;">Z.O.E</span>
+    </div>
+  </div>
+  <select id="engine-select" class="ctrl-btn" onchange="setEngine()" style="margin-left:auto; margin-right:15px; padding:6px 10px; border-radius:8px; outline:none; background:var(--surface2);">
+    <option value="ollama" selected>Local In-Memory (Ollama ps)</option>
+  </select>
+  <select id="model-select" class="ctrl-btn" onchange="saveSelectedModel()" style="margin-right:15px; padding:6px 10px; border-radius:8px; outline:none; background:var(--surface2);">
+    <option value="auto">Auto (Local In-Memory)</option>
+  </select>
+
+  <button id="skills-badge" class="ctrl-btn" onclick="openSkillsModal()" style="margin-right:10px; padding:6px 12px; border-radius:8px; background:rgba(0,229,255,0.15); border:1px solid var(--accent); color:var(--accent); font-weight:600; font-size:12px; display:flex; align-items:center; gap:6px; cursor:pointer;" title="View Active Student Skills">⚡ Skills (4)</button>
+  <button id="register-face-btn" class="ctrl-btn" onclick="registerFace()" style="margin-right:10px; padding:6px 10px; border-radius:8px; background:var(--surface2);">👤 Register Face</button>
+  <div id="user-badge" class="ctrl-btn" style="margin-right:15px; padding:6px 12px; border-radius:8px; background:var(--surface2); color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; cursor:default; border:1px solid var(--border);" title="Retina Face Recognition Status">👤 Scanning…</div>
+  <select id="voice-select" class="ctrl-btn" style="margin-right:15px; padding:6px 10px; border-radius:8px; outline:none; background:var(--surface2);">
+    <option value="en-US-AriaNeural">Aria (US)</option>
+    <option value="en-US-AvaNeural">Ava (US - Natural)</option>
+    <option value="en-US-EmmaNeural">Emma (US - Cheerful)</option>
+    <option value="en-US-JennyNeural">Jenny (US - Comforting)</option>
+    <option value="en-GB-LibbyNeural">Libby (British)</option>
+    <option value="en-AU-NatashaNeural">Natasha (Australian)</option>
+  </select>
+  <button class="ctrl-btn" onclick="clearHistory()" style="margin-right: 15px; padding: 6px 10px; border-radius: 8px; background:var(--surface2);">🗑 Clear</button>
+
+  
+  <div id="status-dot" class="loading" style="margin-left:0;"></div>
+  <span id="status-label">Loading Z.O.E…</span>
+</header>
+
+
+<div id="main">
+
+  <!-- 3D Avatar -->
+  <div id="avatar-panel">
+    <div id="poly-state" style="margin-top:10px;">Dormant</div>
+    
+    <!-- Z.O.E Holographic Portrait -->
+    <div id="portrait-container" style="position:relative; width:330px; height:260px; border-radius:16px; overflow:hidden; border:2px solid var(--border); margin-top:14px; box-shadow:0 0 16px var(--glow); background:#000; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+      <div id="video-loading-placeholder" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#07070a; z-index:2; color:var(--muted); font-size:11px; font-weight:500; letter-spacing:1px; text-align:center;">
+        <div class="loading-spinner" style="width:24px; height:24px; border:2px solid rgba(138,43,226,0.1); border-top-color:var(--accent); border-radius:50%; animation:spin-loader 1s linear infinite; margin-bottom:10px;"></div>
+        Loading Z.O.E...
+      </div>
+      <img id="portrait-fallback-img" src="zoe_avatar.png" alt="Z.O.E Avatar" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; border-radius:16px; transition:transform 0.3s ease, filter 0.3s ease;">
+      <video id="portrait-video" autoplay playsinline
+             style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:16px; z-index:3; opacity:0; transition:opacity 0.5s ease;"></video>
+      <audio id="webrtc-audio" autoplay style="display:none;"></audio>
+    </div>
+    <div style="font-size:10px; color:var(--muted); margin-top:6px; letter-spacing:1px; margin-bottom:14px;">Z.O.E PORTRAIT</div>
+    
+    <!-- Webcam Retina (Visible to help user position face) -->
+    <div style="position:relative; width:330px; height:180px; border-radius:16px; overflow:hidden; border:2px solid var(--border); margin-top:10px; box-shadow:0 0 12px var(--glow); background:#000; flex-shrink:0;">
+      <video id="webcam-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; transform: scaleX(-1);"></video>
+      <canvas id="webcam-canvas" style="display:none;"></canvas>
+    </div>
+    <div style="font-size:10px; color:var(--muted); margin-top:6px; letter-spacing:1px; margin-bottom:14px;">Z.O.E'S RETINA</div>
+  </div>
+
+  <!-- Chat -->
+  <div id="chat-panel">
+    <div id="chat">
+      <div class="welcome" id="welcome">
+        <h2>Good morning.</h2>
+        <p>I am Z.O.E. A multimodal neural mind. Ask me anything.</p>
+        <div class="suggestions">
+          <div class="suggestion" onclick="sendSuggestion(this)">What are you feeling right now?</div>
+          <div class="suggestion" onclick="sendSuggestion(this)">What is consciousness?</div>
+          <div class="suggestion" onclick="sendSuggestion(this)">Tell me something that fills you with awe</div>
+          <div class="suggestion" onclick="sendSuggestion(this)">What did you dream about?</div>
+        </div>
+      </div>
+    </div>
+    <div id="input-area">
+      <button id="mute-btn" class="ctrl-btn" onclick="toggleMute()">🔊 Voice</button>
+      <button id="cont-btn" class="ctrl-btn" onclick="toggleContinuous()" title="Continuous conversation mode">🎙 Continuous</button>
+      <textarea id="user-input" rows="1" placeholder="Talk to Z.O.E…"
+                onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button id="talk-btn" onmousedown="startTalk()" onmouseup="stopTalk()" onmouseleave="stopTalk()"
+              ontouchstart="startTalk()" ontouchend="stopTalk()"
+              title="Hold to talk (push-to-talk)">🎤</button>
+      <button id="stop-btn" onclick="stopGeneration()" style="display:none; width:44px; height:44px; border-radius:50%; background:#ef4444; border:none; cursor:pointer; align-items:center; justify-content:center; font-size:17px; color:#fff; flex-shrink:0;">🛑</button>
+      <button id="send-btn" onclick="sendMessage()">➤</button>
+      <div id="mode-label"></div>
+    </div>
+  </div>
+
+
+</div>
+
+<!-- Skills Registry Modal -->
+<div id="skills-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:100; align-items:center; justify-content:center; padding:20px;">
+  <div style="background:var(--surface); border:1px solid var(--accent); border-radius:16px; width:100%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 0 30px rgba(0,229,255,0.25); overflow:hidden;">
+    <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:var(--surface2);">
+      <div>
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:8px;">
+          ⚡ Z.O.E Capability Registry <span style="font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(0,229,255,0.2); color:var(--accent);">Student Edition</span>
+        </h3>
+        <p style="margin:4px 0 0 0; font-size:12px; color:var(--muted);">Modular Python skills loaded from the <code>skills/</code> directory</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button onclick="reloadSkills()" style="background:var(--surface); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:8px; cursor:pointer; font-size:12px;">🔄 Hot Reload</button>
+        <button onclick="closeSkillsModal()" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; padding:0 4px;">✕</button>
+      </div>
+    </div>
+    <div id="skills-list-container" style="padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; flex:1;">
+      <div style="color:var(--muted); text-align:center; padding:20px;">Loading capabilities…</div>
+    </div>
+    <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface2); font-size:11px; color:var(--muted); display:flex; align-items:center; justify-content:space-between;">
+      <span>💡 Add a skill: <code>git checkout -b feature/&lt;name&gt;-&lt;capability&gt; develop</code></span>
+      <span id="skills-count-footer">0 loaded</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Student Edition: native mode (no WebRTC 3D avatar server required) ──
+const ZOE_NATIVE_MODE = false;
+
+// ── Skills Registry Modal ─────────────────────────────────
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function refreshSkillsBadge(){
+  try{
+    const d = await (await fetch('/api/skills')).json();
+    document.getElementById('skills-badge').textContent = `⚡ Skills (${d.count})`;
+    return d;
+  }catch(e){ return null; }
+}
+function renderSkills(d){
+  const box = document.getElementById('skills-list-container');
+  if(!d || !d.skills){ box.innerHTML = '<div style="color:#fca5a5;">Could not load skills. Is the server running?</div>'; return; }
+  document.getElementById('skills-count-footer').textContent = `${d.count} loaded`;
+  box.innerHTML = d.skills.map(s => `
+    <div style="border:1px solid var(--border); border-radius:12px; padding:12px 14px; background:var(--surface2);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <strong style="color:var(--text); font-size:14px;">${escapeHtml(s.name)}</strong>
+        <span style="font-size:11px; color:var(--text); background:rgba(0,229,255,0.15); padding:2px 8px; border-radius:10px;">v${escapeHtml(s.version)}</span>
+      </div>
+      <div style="color:var(--text); font-size:12px; margin-top:6px;">${escapeHtml(s.description)}</div>
+      <div style="color:var(--muted); font-size:11px; margin-top:6px;">Author: ${escapeHtml(s.author)} · Class: <code>${escapeHtml(s.class_name)}</code></div>
+      <div style="color:var(--muted); font-size:11px; margin-top:4px;">Triggers: ${s.triggers.slice(0,8).map(t=>'<code>'+escapeHtml(t)+'</code>').join(' ')}</div>
+    </div>`).join('');
+}
+async function openSkillsModal(){
+  document.getElementById('skills-modal').style.display = 'flex';
+  renderSkills(await refreshSkillsBadge());
+}
+function closeSkillsModal(){ document.getElementById('skills-modal').style.display = 'none'; }
+async function reloadSkills(){
+  try{ await fetch('/api/skills/reload', {method:'POST'}); }catch(e){}
+  renderSkills(await refreshSkillsBadge());
+}
+setTimeout(refreshSkillsBadge, 500);
+
+// Resolve WebRTC target URL dynamically (supports local dev and remote tunnels via ?webrtc= URL param)
+const urlParams = new URLSearchParams(window.location.search);
+const webrtcParam = urlParams.get('webrtc');
+if (webrtcParam) {
+  localStorage.setItem('webrtcServerUrl', webrtcParam.replace(/\/+$/, ''));
+}
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const defaultWebrtcUrl = isLocalhost ? 'http://' + window.location.hostname + ':7860' : 'http://' + window.location.hostname + ':7861';
+window.webrtcServerUrl = (webrtcParam || localStorage.getItem('webrtcServerUrl') || defaultWebrtcUrl).replace(/\/+$/, '');
+
+// ── State Machine ────────────────────────────────────────
+let STATE = 'dormant';
+function setState(s) {
+  STATE=s;
+  const labels={dormant:'Dormant',assembling:'Awakening…',idle:'Listening',thinking:'Processing…',speaking:'Speaking',recording:'Recording…'};
+  document.getElementById('poly-state').textContent=labels[s]||s;
+  const dot=document.getElementById('status-dot');
+  if(s==='speaking') dot.className='speaking';
+  else if(s==='recording') dot.className='speaking';
+}
+function activatePoly() {
+  if (STATE==='dormant') {
+    setState('assembling');
+    setTimeout(()=>setState('idle'), 2800);
+  }
+}
+
+const chatEl   = document.getElementById('chat');
+const input    = document.getElementById('user-input');
+const sendBtn  = document.getElementById('send-btn');
+const talkBtn  = document.getElementById('talk-btn');
+const contBtn  = document.getElementById('cont-btn');
+const modeLbl  = document.getElementById('mode-label');
+const statusDot= document.getElementById('status-dot');
+const statusLbl= document.getElementById('status-label');
+let isGenerating=false, muted=false, currentAudio=null, speakTimeout=null, ignoreSpeech=false, lastPolySpeechTime=0;
+let continuousMode = false;
+
+// ── Chat Persistence ──────────────────────────────────────
+let chatHistory = JSON.parse(localStorage.getItem('poly_chat_history') || '[]');
+function saveHistory() { localStorage.setItem('poly_chat_history', JSON.stringify(chatHistory)); }
+function clearHistory() {
+  chatHistory = [];
+  saveHistory();
+  chatEl.innerHTML = `
+    <div class="welcome" id="welcome">
+      <h2>Good morning.</h2>
+      <p>I am Z.O.E. A multimodal neural mind. Ask me anything.</p>
+      <div class="suggestions">
+        <div class="suggestion" onclick="sendSuggestion(this)">What are you feeling right now?</div>
+        <div class="suggestion" onclick="sendSuggestion(this)">What is consciousness?</div>
+        <div class="suggestion" onclick="sendSuggestion(this)">Tell me something that fills you with awe</div>
+        <div class="suggestion" onclick="sendSuggestion(this)">What did you dream about?</div>
+      </div>
+    </div>
+  `;
+  fetch('/reset', { method: 'POST' }).catch(()=>{});
+}
+function restoreHistory() {
+  for(let msg of chatHistory) { appendMsg(msg.role, msg.text, msg.meta, true); }
+}
+// ── Avatar Restart ────────────────────────────────────────
+function restartAvatar() {
+  const btn = document.getElementById('restart-avatar-btn');
+  if (btn.disabled) return;
+  
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.style.cursor = 'not-allowed';
+  
+  // Show placeholder while restarting
+  const placeholder = document.getElementById('video-loading-placeholder');
+  if (placeholder) placeholder.style.display = 'flex';
+  if (portraitVideo) {
+    portraitVideo.style.opacity = '0';
+    portraitVideo.srcObject = null;
+  }
+  window.isWebRTCConnected = false;
+  if (rtcPeerConnection) { rtcPeerConnection.close(); rtcPeerConnection = null; }
+
+  fetch('/restart_streamer', { method: 'POST' }).catch(()=>{});
+  
+  // Countdown on button
+  let secs = 15;
+  btn.textContent = `⏳ Restarting… ${secs}s`;
+  const countdown = setInterval(() => {
+    secs--;
+    btn.textContent = `⏳ Restarting… ${secs}s`;
+    if (secs <= 0) {
+      clearInterval(countdown);
+      btn.textContent = '📡 Restart Avatar';
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+      // Trigger fresh WebRTC reconnect
+      isInitWebRTCActive = false;
+      initWebRTC();
+    }
+  }, 1000);
+}
+// ── Mute Toggle ──────────────────────────────────────────
+function toggleMute(){
+  muted=!muted;
+  portraitVideo.muted = muted;
+  document.getElementById('mute-btn').textContent = muted ? '🔇 Muted' : '🔊 Voice';
+  if(muted&&currentAudio){currentAudio.pause();setState('idle');}
+}
+
+// ── Suggestions ──────────────────────────────────────────
+function sendSuggestion(el) {
+  document.getElementById('user-input').value = el.textContent;
+  sendMessage();
+}
+
+// ── Status Poll ──────────────────────────────────────────
+async function checkStatus(){
+  try{
+    const r = await fetch('/status'); 
+    const d = await r.json();
+
+    const engineSelect = document.getElementById('engine-select');
+    if (engineSelect && d.current_engine) {
+      engineSelect.value = d.current_engine;
+    }
+
+    const engine = engineSelect ? engineSelect.value : 'opencode';
+
+    if (d.last_used_model && d.last_used_model !== "Auto") {
+      statusDot.className = 'ready';
+      statusLbl.textContent = d.last_used_model;
+      activatePoly();
+    } else if (engine === 'ollama') {
+      if (d.ollama_active) {
+        statusDot.className = 'ready';
+        statusLbl.textContent = `Ollama: ${d.active_model || 'phi4-mini'}`;
+        activatePoly();
+      } else {
+        statusDot.className = 'loading';
+        statusLbl.textContent = 'Ollama offline…';
+      }
+    } else {
+      statusDot.className = 'ready';
+      statusLbl.textContent = 'APIs: OpenCode Fallbacks';
+      activatePoly();
+    }
+
+    const badge = document.getElementById('user-badge');
+    if (badge && !recognizedUserName && d.registered_user) {
+      badge.innerHTML = `<span style="color:var(--muted);">👤 ${d.registered_user} (Standby)</span>`;
+    }
+    return true;
+  } catch(e) {
+    statusDot.className = 'loading'; 
+    statusLbl.textContent = 'Connecting to server…'; 
+    return false;
+  }
+}
+async function loadModelsDropdown() {
+  const modelSelect = document.getElementById('model-select');
+  if (!modelSelect) return;
+  try {
+    const res = await fetch('/models');
+    if (!res.ok) return;
+    const data = await res.json();
+    modelSelect.innerHTML = '';
+    
+    const groups = data.groups || data;
+    if (Array.isArray(groups)) {
+      for (const item of groups) {
+        if (item.label && Array.isArray(item.options)) {
+          const optgroup = document.createElement('optgroup');
+          optgroup.label = item.label;
+          for (const optData of item.options) {
+            const opt = document.createElement('option');
+            opt.value = optData.value || optData.id;
+            opt.textContent = optData.name;
+            optgroup.appendChild(opt);
+          }
+          modelSelect.appendChild(optgroup);
+        } else {
+          const opt = document.createElement('option');
+          opt.value = item.value || item.id;
+          opt.textContent = item.name;
+          modelSelect.appendChild(opt);
+        }
+      }
+    }
+    const savedModel = localStorage.getItem('poly_selected_model');
+    if (savedModel && modelSelect) {
+      modelSelect.value = savedModel;
+    }
+  } catch(e) {
+    console.warn("Failed to load models dropdown:", e);
+  }
+}
+
+setInterval(checkStatus, 2000);
+checkStatus();
+loadModelsDropdown();
+clearHistory();
+
+function autoResize(el){el.style.height='auto';el.style.height=Math.max(64,el.scrollHeight)+'px';}
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}
+function sendSuggestion(el){input.value=el.textContent;autoResize(input);sendMessage();}
+
+function appendMsg(role,text,meta_extra,skipSave=false){
+  if(!skipSave) {
+    chatHistory.push({role, text, meta: meta_extra || new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
+    saveHistory();
+  }
+  const w=document.getElementById('welcome'); if(w) w.remove();
+  const div=document.createElement('div'); div.className=`msg ${role}`;
+  const ico=document.createElement('div'); ico.className='msg-ico';
+  ico.textContent=role==='poly'?'Z':'◈';
+  const bubble=document.createElement('div'); bubble.className='bubble';
+  let formattedText = text;
+  if(role === 'poly') {
+      formattedText = formattedText.replace(/<think>([\s\S]*?)(?:<\/think>|$)/gi, '<div style="color:var(--muted);font-style:italic;font-size:12px;border-left:2px solid var(--accent);padding-left:10px;margin-bottom:10px;">$1</div>');
+      formattedText = formattedText.replace(/\[User Model\](.*?)(?=\n|$)/gi, '<div style="color:var(--muted);font-style:italic;font-size:12px;border-left:2px solid #fbbf24;padding-left:10px;margin-bottom:10px;">[User Model]$1</div>');
+      formattedText = formattedText.replace(/\[Fractal Archetype Context\]([\s\S]*?)\[\/Fractal Archetype Context\]/gi, '<div style="color:var(--muted);font-style:italic;font-size:12px;border-left:2px solid #4ade80;padding-left:10px;margin-bottom:10px;">[Fractal Context]$1</div>');
+  }
+  
+  // Format markdown headers, bold text, and inline images
+  formattedText = formattedText.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%; border-radius:16px; margin:10px 0; display:block; box-shadow:0 4px 16px rgba(0,0,0,0.3); border:1px solid var(--border);">');
+  formattedText = formattedText.replace(/^#+\s*(.*)$/gm, '<strong style="font-size:1.1em; color:var(--accent); display:block; margin-top:8px; margin-bottom:4px;">$1</strong>');
+  formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  bubble.innerHTML='<p>'+formattedText.replace(/\n\n+/g,'</p><p>').replace(/\n/g,'<br/>')+'</p>';
+  const meta=document.createElement('div'); meta.className='meta';
+  meta.textContent=meta_extra || new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const inner=document.createElement('div');
+  inner.appendChild(bubble); inner.appendChild(meta);
+  div.appendChild(ico); div.appendChild(inner);
+  chatEl.appendChild(div); chatEl.scrollTop=chatEl.scrollHeight;
+}
+
+function showTyping(){
+  const w=document.getElementById('welcome'); if(w) w.remove();
+  const div=document.createElement('div'); div.className='msg poly'; div.id='typing-msg';
+  const ico=document.createElement('div'); ico.className='msg-ico'; ico.textContent='✦';
+  const t=document.createElement('div'); t.className='typing';
+  t.innerHTML='<span></span><span></span><span></span>';
+  div.appendChild(ico); div.appendChild(t);
+  chatEl.appendChild(div); chatEl.scrollTop=chatEl.scrollHeight;
+}
+function hideTyping(){const el=document.getElementById('typing-msg');if(el)el.remove();}
+
+async function speakText(text){
+  if(muted) return;
+  let spokenText = text.replace(/<think>([\s\S]*?)(?:<\/think>|$)/gi, '');
+  spokenText = spokenText.replace(/<\/?think>/gi, '');
+  spokenText = spokenText.replace(/\[User Model\](.*?)(?=\n|$)/gi, '');
+  spokenText = spokenText.replace(/\[Fractal Archetype Context\]([\s\S]*?)\[\/Fractal Archetype Context\]/gi, '');
+  spokenText = spokenText.replace(/\*/g, '');
+  spokenText = spokenText.replace(/^#+\s*/gm, '');
+  spokenText = spokenText.trim();
+  if(!spokenText) return;
+  try{
+    if(currentAudio){currentAudio.pause();currentAudio.src='';currentAudio.load();currentAudio=null;}
+    const voice = document.getElementById('voice-select').value;
+    const url = '/tts?voice=' + voice + '&text=' + encodeURIComponent(spokenText);
+    currentAudio = new Audio(url);
+    currentAudio.preload = 'auto';
+    setupAudioAnalysis(currentAudio);
+    currentAudio.onended=()=>{
+        setState(continuousMode?'listening':'idle');
+        statusDot.className='ready';
+        if(continuousMode) startListening();
+    };
+    currentAudio.onerror=()=>{
+        console.error('TTS audio could not be loaded:', currentAudio.error);
+        setState(continuousMode?'listening':'idle');
+    };
+    setState('speaking');
+    await currentAudio.play();
+  }catch(e){
+    console.error('TTS error:', e);
+    setState(continuousMode?'listening':'idle');
+  }
+}
+
+async function stopGeneration() {
+  if(!isGenerating) return;
+  try {
+    await fetch('/interrupt', {method: 'POST'});
+  } catch(e) {}
+  if (speakTimeout) {
+    clearTimeout(speakTimeout);
+    speakTimeout = null;
+  }
+  isGenerating = false;
+  sendBtn.style.display = 'flex';
+  document.getElementById('stop-btn').style.display = 'none';
+  if(!continuousMode) {
+      input.focus();
+  } else {
+      setState('listening');
+      startListening();
+  }
+}
+
+let lastPolyReply = "";
+let lastPolyAvatar = "";
+
+async function sendMessage(textOverride){
+  const text = textOverride || input.value.trim();
+  if(!text||isGenerating) return;
+  if(isSelfEcho(text)) {
+    console.log("[Anti-Loop] Refusing to send self-echo:", text);
+    input.value = '';
+    return;
+  }
+  isGenerating=true; sendBtn.style.display='none'; document.getElementById('stop-btn').style.display='flex';
+  stopListening();
+  if(!textOverride){input.value=''; input.style.height='auto';}
+  appendMsg('user',text);
+
+  showTyping(); setState('thinking');
+  let replySpan = null, metaStr = '';
+  try{
+    const voice = document.getElementById('voice-select').value;
+    const engine = document.getElementById('engine-select').value;
+    const model = document.getElementById('model-select').value;
+    const agentMode = document.getElementById('agent-mode') ? document.getElementById('agent-mode').checked : false;
+    const imgFrame = getWebcamFrame();
+    const payload = {message:text, voice:voice, engine:engine, model:model, agent_mode:agentMode};
+    if (imgFrame) { payload.image_data = imgFrame; }
+
+    const r = await fetch('/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    
+    hideTyping();
+    if(!r.ok) {
+        appendMsg('poly','Error: ' + await r.text());
+        setState(continuousMode?'listening':'idle');
+        return;
+    }
+
+    const data = await r.json();
+    const replyText = data.reply || "";
+    
+    // Create message bubble
+    metaStr = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const msgDiv = document.createElement('div'); 
+    msgDiv.className = 'msg poly';
+    
+    const ico = document.createElement('div'); 
+    ico.className = 'msg-ico';
+    ico.textContent = '✦';
+    
+    const inner = document.createElement('div');
+    const bubble = document.createElement('div'); 
+    bubble.className = 'bubble';
+    
+    replySpan = document.createElement('span');
+    replySpan.className = 'msg-text';
+    replySpan.innerText = replyText;
+    bubble.appendChild(replySpan);
+    
+    const metaDiv = document.createElement('div'); 
+    metaDiv.className = 'meta';
+    metaDiv.textContent = metaStr;
+    
+    inner.appendChild(bubble); 
+    inner.appendChild(metaDiv);
+    msgDiv.appendChild(ico); 
+    msgDiv.appendChild(inner);
+    
+    chatEl.appendChild(msgDiv);
+    chatEl.scrollTop = chatEl.scrollHeight;
+    
+    // Show which skill or model answered (helps students debug their skills)
+    metaDiv.textContent = metaStr + ' · ' + (data.model || 'Z.O.E');
+
+    // Native mode: speak the reply with Edge-TTS locally.
+    // In WebRTC mode, the WebRTC server streams the photoreal video + audio back.
+    if (ZOE_NATIVE_MODE) {
+        speakText(replyText);
+    }
+
+    // Save to history
+    // Estimate Z.O.E's speech duration accurately (~170 WPM = ~2.8 words/sec + 400ms lead-out buffer)
+    const wordCount = replyText.split(/\s+/).length;
+    const speakTime = Math.max(3000, (wordCount / 2.2) * 1000 + 1500);
+    
+    if (speakTimeout) clearTimeout(speakTimeout);
+    speakTimeout = setTimeout(() => {
+        isGenerating = false;
+        lastPolySpeechTime = Date.now();
+        sendBtn.style.display = 'flex';
+        document.getElementById('stop-btn').style.display = 'none';
+        setState(continuousMode ? 'listening' : 'idle');
+        if (!continuousMode) {
+            input.focus();
+        } else {
+            setTimeout(() => {
+                if (STATE !== 'speaking' && !isGenerating) {
+                    startListening();
+                }
+            }, 300);
+        }
+    }, speakTime);
+
+  }catch(e){
+    hideTyping();
+    appendMsg('poly','Connection lost: ' + e.message);
+    
+    // 5-second cooldown before releasing state to prevent feedback loops if she is still speaking
+    setTimeout(() => {
+        isGenerating = false;
+        sendBtn.style.display = 'flex';
+        document.getElementById('stop-btn').style.display = 'none';
+        if(!continuousMode) {
+            input.focus();
+        } else {
+            setState('listening');
+            startListening();
+        }
+    }, 5000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PHOTOREAL AVATAR (portrait window video)
+// ═══════════════════════════════════════════════════════════
+const portraitVideo = document.getElementById('portrait-video');
+let avatarPollTimer = null;
+
+async function refreshIdlePortrait(){
+  try{
+    const s = await (await fetch('/avatar/status')).json();
+    if(s.idle_url) showPortraitVideo(s.idle_url, true);
+  }catch(e){}
+}
+
+function showPortraitVideo(url, isIdle, withAudio, onPlayStart, onEndCallback) {
+  if (url === 'webrtc') {
+    portraitVideo.muted = !withAudio;
+    if (portraitVideo.srcObject) {
+      portraitVideo.play().catch(e => console.log("WebRTC play resume:", e));
+    }
+    portraitVideo.style.opacity = '1';
+    const placeholder = document.getElementById('video-loading-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
+    // idle-video removed
+    if(onPlayStart) onPlayStart();
+    return;
+  }
+  if (isIdle) {
+    portraitVideo.style.opacity = '0';
+    setTimeout(() => { portraitVideo.src = ''; if(onPlayStart) onPlayStart(); }, 400);
+  } else {
+    if (portraitVideo.style.opacity === '1') {
+      portraitVideo.style.opacity = '0';
+      setTimeout(() => { _loadAndPlay(url, false, withAudio, onEndCallback, onPlayStart); }, 400);
+    } else {
+      _loadAndPlay(url, false, withAudio, onEndCallback, onPlayStart);
+    }
+  }
+}
+
+function _loadAndPlay(url, loop, withAudio, onEndedCallback, onStartCallback) {
+    portraitVideo.onended = () => {
+        if(withAudio) {
+            setState(continuousMode ? 'listening' : 'idle');
+            statusDot.className = 'ready';
+            if(continuousMode) startListening();
+        }
+        if(onEndedCallback) onEndedCallback();
+    };
+    
+    portraitVideo.loop = !!loop;
+    
+    // Fix audio stutter: don't start muted and flip it! Just start unmuted if requested.
+    portraitVideo.muted = !withAudio;
+    if(withAudio) {
+        portraitVideo.volume = 1.0;
+        setState('speaking');
+        stopListening(); // Mute microphone so it doesn't hear the video
+    }
+    
+    portraitVideo.src = url;
+    
+    portraitVideo.addEventListener('playing', function onPlaying() {
+      portraitVideo.removeEventListener('playing', onPlaying);
+      portraitVideo.style.opacity = '1';
+      if(onStartCallback) onStartCallback();
+    });
+
+    portraitVideo.play().catch((e)=>{
+       console.warn("Autoplay with audio blocked, falling back to muted:", e);
+       if(withAudio) {
+           portraitVideo.muted = true;
+           portraitVideo.play().catch(()=>{});
+       }
+    });
+}
+
+async function initAvatarVideo(){
+  // Removed offline avatar polling logic (pure WebRTC mode)
+}
+
+function pollAvatarVideo(){
+  // Removed offline avatar polling logic (pure WebRTC mode)
+}
+
+
+
+// ═══════════════════════════════════════════════════════════
+//  PUSH-TO-TALK (hold mic button)
+// ═══════════════════════════════════════════════════════════
+let pttRecognizer = null;
+let pttRecording = false;
+
+function cleanSpeechTranscript(text) {
+  if (!text) return "";
+  let clean = text.toLowerCase();
+  
+  // Phonetic/mishearing mappings for "hi Z.O.E" / "hi zoe" or similar
+  const phraseMappings = {
+    "call hello": "hi zoe",
+    "cal hello": "hi zoe",
+    "hi hello": "hi zoe",
+    "high hello": "hi zoe",
+    "hey hello": "hey zoe",
+    "hi zoey": "hi zoe",
+    "hey zoey": "hey zoe",
+    "hi zoe": "hi zoe",
+    "hey zoe": "hey zoe",
+    "hi z.o.e": "hi zoe",
+    "hey z.o.e": "hey zoe",
+    "hi zoe's": "hi zoe",
+    "so we": "zoe",
+    "zoey": "zoe",
+    "zoie": "zoe",
+    "zowie": "zoe",
+    "z.o.e": "zoe",
+    "z o e": "zoe",
+    "hi holy": "hi zoe",
+    "hi wholly": "hi zoe",
+    "hi hawley": "hi zoe",
+    "hi holly": "hi zoe",
+    "hi poly": "hi zoe",
+    "how long": "hi zoe",
+    "wholly": "zoe",
+    "hawley": "zoe",
+    "holy": "zoe",
+    "folly": "zoe",
+    "poly": "zoe",
+    "holly": "zoe"
+  };
+
+  for (const [misheard, corrected] of Object.entries(phraseMappings)) {
+    const regex = new RegExp("\\b" + misheard + "\\b", "gi");
+    clean = clean.replace(regex, corrected);
+  }
+  
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
+function isSelfEcho(transcript) {
+  if (!transcript || !lastPolyReply) return false;
+  const tClean = transcript.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  const rClean = lastPolyReply.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!tClean || !rClean) return false;
+
+  if (rClean.includes(tClean) || tClean.includes(rClean)) return true;
+
+  const tWords = tClean.split(' ').filter(w => w.length > 1);
+  if (tWords.length === 0) return false;
+  const rWords = new Set(rClean.split(' '));
+  let matches = 0;
+  for (const w of tWords) {
+    if (rWords.has(w)) matches++;
+  }
+  return (matches / tWords.length) >= 0.35;
+}
+
+function startTalk(){
+  if(isGenerating || pttRecording) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){modeLbl.textContent='Speech not supported in this browser';return;}
+
+  // Stop any playing audio so it doesn't interfere
+  if(currentAudio){currentAudio.pause();currentAudio=null;}
+
+  pttRecognizer = new SpeechRecognition();
+  pttRecognizer.continuous = false;
+  pttRecognizer.interimResults = true;
+  pttRecognizer.maxAlternatives = 1;
+  pttRecognizer.lang = 'en-US';
+
+  pttRecognizer.onresult = (e) => {
+    let finalTranscript = '';
+    let interimTranscript = '';
+    for (let i = 0; i < e.results.length; ++i) {
+      if (e.results[i].isFinal) {
+        finalTranscript += e.results[i][0].transcript;
+      } else {
+        interimTranscript += e.results[i][0].transcript;
+      }
+    }
+    // Show live corrected transcript in input
+    input.value = cleanSpeechTranscript(finalTranscript + interimTranscript);
+    autoResize(input);
+  };
+  pttRecognizer.onend = () => {
+    pttRecording = false;
+    talkBtn.classList.remove('recording');
+    modeLbl.textContent = '';
+    const textToSend = input.value.trim();
+    if(textToSend){
+      sendMessage(textToSend);
+      input.value = '';
+      input.style.height = 'auto';
+    }
+  };
+  pttRecognizer.onerror = (e) => {
+    pttRecording = false;
+    talkBtn.classList.remove('recording');
+    modeLbl.textContent = e.error === 'not-allowed'?'Mic permission denied':'';
+  };
+
+  pttRecording = true;
+  talkBtn.classList.add('recording');
+  modeLbl.textContent = 'Listening… release to send';
+  setState('recording');
+  pttRecognizer.start();
+}
+
+function stopTalk(){
+  if(!pttRecording || !pttRecognizer) return;
+  pttRecognizer.stop();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CONTINUOUS CONVERSATION MODE
+// ═══════════════════════════════════════════════════════════
+let contRecognizer = null;
+let contListening = false;
+let contRestartTimer = null;
+
+function toggleContinuous(){
+  continuousMode = !continuousMode;
+  contBtn.classList.toggle('active', continuousMode);
+  if(continuousMode){
+    contBtn.textContent = '🎙 Listening…';
+    modeLbl.textContent = 'Continuous mode ON — speak naturally';
+    if (muted) toggleMute();
+    startListening();
+  } else {
+    contBtn.textContent = '🎙 Continuous';
+    modeLbl.textContent = 'Continuous mode OFF';
+    stopListening();
+  }
+}
+
+function stopListening() {
+  ignoreSpeech = true;
+  contListening = false;
+  if (contRestartTimer) clearTimeout(contRestartTimer);
+  if (contRecognizer) {
+    try {
+      contRecognizer.onresult = null;
+      contRecognizer.onend = null;
+      contRecognizer.onerror = null;
+      contRecognizer.stop();
+      contRecognizer.abort();
+    } catch(e) {}
+    contRecognizer = null;
+  }
+}
+
+function startListening(){
+  if(!continuousMode || isGenerating || contListening || STATE === 'speaking' || STATE === 'thinking') return;
+  ignoreSpeech = false;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){modeLbl.textContent='Speech not supported';return;}
+
+  if(currentAudio){currentAudio.pause();currentAudio.src='';currentAudio=null;}
+
+  contRecognizer = new SpeechRecognition();
+  contRecognizer.continuous = true;
+  contRecognizer.interimResults = true;
+  contRecognizer.maxAlternatives = 1;
+  contRecognizer.lang = 'en-US';
+
+  let silenceTimer = null;
+
+  contRecognizer.onresult = (e) => {
+    if (ignoreSpeech || isGenerating || STATE === 'speaking' || STATE === 'thinking') {
+      return;
+    }
+    const latestResult = e.results[e.results.length - 1];
+    if (!latestResult) return;
+    const currentText = latestResult[0].transcript.trim();
+    const cleanedText = cleanSpeechTranscript(currentText);
+
+    if (Date.now() - lastPolySpeechTime < 3500) {
+      console.log("[Anti-Loop] Discarding post-speech speaker reverberation:", cleanedText);
+      clearTimeout(silenceTimer);
+      input.value = '';
+      return;
+    }
+
+    if (isSelfEcho(cleanedText)) {
+      console.log("[Anti-Loop] Ignored self-echo from mic:", cleanedText);
+      clearTimeout(silenceTimer);
+      input.value = '';
+      return;
+    }
+
+    input.value = cleanedText;
+    autoResize(input);
+
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(()=>{
+      const textToSend = input.value.trim();
+      if(textToSend && !isGenerating && STATE !== 'speaking' && STATE !== 'thinking' && !isSelfEcho(textToSend)){
+        sendMessage(textToSend);
+        input.value = '';
+        input.style.height = 'auto';
+      }
+    }, 2500);
+  };
+
+  contRecognizer.onend = () => {
+    contListening = false;
+    if(continuousMode && !isGenerating && STATE !== 'speaking' && STATE !== 'thinking'){
+      clearTimeout(contRestartTimer);
+      contRestartTimer = setTimeout(()=>startListening(), 400);
+    }
+  };
+
+  contRecognizer.onerror = (e) => {
+    if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+      modeLbl.textContent = 'Mic blocked (HTTP/Permission issue)';
+      continuousMode = false;
+      contListening = false;
+      contBtn.classList.remove('active');
+      contBtn.textContent = '🎙 Continuous';
+      return;
+    }
+    contListening = false;
+    if(continuousMode && !isGenerating && STATE !== 'speaking' && STATE !== 'thinking'){
+      clearTimeout(contRestartTimer);
+      contRestartTimer = setTimeout(()=>startListening(), 500);
+    }
+  };
+
+  contListening = true;
+  setState('listening');
+  try{contRecognizer.start();}catch(e){}
+}
+
+function stopListening(){
+  ignoreSpeech = true;
+  if(contRecognizer){try{contRecognizer.stop();}catch(e){}}
+  contListening = false;
+  setState('idle');
+}
+
+// ── Model Selection ────────────────────────────────────────
+function saveSelectedModel() {
+  const model = document.getElementById('model-select').value;
+  localStorage.setItem('poly_selected_model', model);
+}
+
+function saveAgentMode() {
+  const isAgent = document.getElementById('agent-mode').checked;
+  localStorage.setItem('poly_agent_mode', isAgent ? 'true' : 'false');
+}
+
+async function loadModelsDropdown() {
+  try {
+    const res = await fetch('/models');
+    if (!res.ok) return;
+    const data = await res.json();
+    const modelSelect = document.getElementById('model-select');
+    if (!modelSelect) return;
+    
+    modelSelect.innerHTML = ""; // Clear existing options
+    
+    // Save current value
+    const savedModel = localStorage.getItem('poly_selected_model') || 'auto';
+    
+    data.groups.forEach(group => {
+      if (group.label === "Auto Select") {
+        group.options.forEach(opt => {
+          const option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.name;
+          modelSelect.appendChild(option);
+        });
+      } else {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = group.label;
+        group.options.forEach(opt => {
+          const option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.name;
+          optgroup.appendChild(option);
+        });
+        modelSelect.appendChild(optgroup);
+      }
+    });
+    
+    modelSelect.value = savedModel;
+    const agentModeCheckbox = document.getElementById('agent-mode');
+    if (agentModeCheckbox) {
+      agentModeCheckbox.checked = localStorage.getItem('poly_agent_mode') === 'true';
+    }
+  } catch (err) {
+    console.error("Failed to load models:", err);
+  }
+}
+
+// ── Engine Toggle ────────────────────────────────────────
+async function setEngine() {
+  const engine = document.getElementById('engine-select').value;
+  const statusDot = document.getElementById('status-dot');
+  const statusLbl = document.getElementById('status-label');
+  
+  statusDot.className = 'loading';
+  statusLbl.textContent = engine === 'ollama' ? 'Connecting to Ollama…' : 'Switching to APIs…';
+  
+  try {
+    setState('thinking');
+    await fetch('/set_engine', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ engine: engine })
+    });
+    setState('idle');
+    checkStatus();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+async function registerFace() {
+  const name = prompt("Enter your name to register your face:");
+  if (!name) return;
+  
+  const imgFrame = getWebcamFrame();
+  if (!imgFrame) {
+      alert("Webcam is not active or hasn't loaded yet. Please verify webcam access is allowed.");
+      return;
+  }
+  
+  try {
+      const response = await fetch('/register_face', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ name: name, image_data: imgFrame })
+      });
+      const result = await response.json();
+      if (response.ok) {
+          alert(result.message);
+          hasGreetedUser = false;
+          recognizedUserName = name;
+          setTimeout(checkWebcamFace, 500);
+      } else {
+          alert("Error: " + result.error);
+      }
+  } catch(e) {
+      alert("Failed to communicate with server: " + e.message);
+  }
+}
+
+// ── Webcam Retina Initialization ─────────────────────────
+const videoElement = document.getElementById('webcam-video');
+const webcamCanvas = document.getElementById('webcam-canvas');
+
+let bootupGreetingDone = false;
+
+async function initWebcam() {
+  try {
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" } });
+    } catch(e) {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    }
+    videoElement.srcObject = stream;
+    await videoElement.play().catch(e => console.log("Retina play:", e));
+    console.log("[Retina] Camera feed active.");
+    startFaceMonitoring();
+  } catch (err) {
+    console.warn("[Retina] Webcam permission denied or not available:", err);
+  }
+}
+
+function getWebcamFrame() {
+  if (videoElement.srcObject && videoElement.readyState >= 2) {
+    const ctx = webcamCanvas.getContext('2d');
+    webcamCanvas.width = 224;
+    webcamCanvas.height = 224;
+    ctx.drawImage(videoElement, 0, 0, 224, 224);
+    return webcamCanvas.toDataURL('image/jpeg', 0.8);
+  }
+  return null;
+}
+
+let faceMonitoringInterval = null;
+let recognizedUserName = null;
+let hasGreetedUser = false;
+
+async function checkWebcamFace() {
+  if (isGenerating) return;
+  const frame = getWebcamFrame();
+  if (!frame) return;
+
+  try {
+    const res = await fetch('/recognize_face', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_data: frame })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const badge = document.getElementById('user-badge');
+
+    if (data.status === 'matched' && data.name) {
+      recognizedUserName = data.name;
+      if (badge) {
+        badge.innerHTML = `<span style="color:#4ade80; font-weight:600;">👤 ${data.name} (Verified)</span>`;
+        badge.style.borderColor = 'rgba(74,222,128,0.5)';
+        badge.style.boxShadow = '0 0 8px rgba(74,222,128,0.2)';
+      }
+      
+      // Automatic recognition greeting on startup / restart
+      if (!hasGreetedUser) {
+        hasGreetedUser = true;
+        const greetingText = `Hi ${data.name}! Good to see you. I am Z.O.E, live through your 3D avatar. How can I help you today?`;
+        appendMsg('poly', greetingText);
+        speakText(greetingText);
+      }
+    } else if (data.status === 'face_detected') {
+      if (badge && !recognizedUserName) {
+        badge.innerHTML = `<span style="color:#fbbf24;">👤 Face Detected</span>`;
+        badge.style.borderColor = 'rgba(251,191,36,0.3)';
+      }
+    } else if (data.status === 'unmatched') {
+      if (badge && !recognizedUserName) {
+        badge.innerHTML = `<span style="color:#f87171;">👤 Guest Face</span>`;
+        badge.style.borderColor = 'rgba(248,113,113,0.3)';
+      }
+    } else {
+      if (badge && !recognizedUserName) {
+        badge.innerHTML = `<span style="color:var(--muted);">👤 Scanning…</span>`;
+        badge.style.borderColor = 'var(--border)';
+      }
+    }
+  } catch(e) {
+    // Silent background monitoring
+  }
+}
+
+function startFaceMonitoring() {
+  if (faceMonitoringInterval) clearInterval(faceMonitoringInterval);
+  setTimeout(checkWebcamFace, 1200);
+  faceMonitoringInterval = setInterval(checkWebcamFace, 2500);
+}
+
+// ── Audio Analysis & WebGL 2D Puppet Warp ───────────────
+let audioCtx = null;
+let analyser = null;
+let sourceNode = null;
+let currentVolume = 0;
+
+let blinkFactor = 0; // 0 = open, 1 = closed
+
+function setupAudioAnalysis(audioElement) {
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64;
+    }
+    
+    if (sourceNode) {
+      sourceNode.disconnect();
+    }
+    sourceNode = audioCtx.createMediaElementSource(audioElement);
+    sourceNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    
+    analyzeAudio();
+  } catch(e) {
+    console.warn("[AudioAnalysis] Failed to initialize:", e);
+  }
+}
+
+function analyzeAudio() {
+  if (!analyser || STATE !== 'speaking') {
+    currentVolume = 0;
+    return;
+  }
+  
+  requestAnimationFrame(analyzeAudio);
+  
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  analyser.getByteFrequencyData(dataArray);
+  
+  let sum = 0;
+  for (let i = 0; i < bufferLength; i++) {
+    sum += dataArray[i];
+  }
+  currentVolume = sum / bufferLength;
+}
+
+// Puppet Warp animation loop disabled
+
+// Blinking trigger loop (disabled to keep the photoreal portrait undistorted)
+// function triggerBlink() { ... }
+
+function saveSelectedModel() {
+  const select = document.getElementById('model-select');
+  if (select) {
+    localStorage.setItem('poly_selected_model', select.value);
+  }
+}
+
+initWebcam();
+initAvatarVideo();
+setTimeout(initWebRTC, 500);
+
+// Voice Persistence
+const voiceSelect = document.getElementById('voice-select');
+const savedVoice = localStorage.getItem('poly_voice');
+if (savedVoice) voiceSelect.value = savedVoice;
+voiceSelect.addEventListener('change', () => {
+  localStorage.setItem('poly_voice', voiceSelect.value);
+});
+
+// WebRTC Integration
+let rtcPeerConnection = null;
+window.isWebRTCConnected = false;
+
+async function restartAvatar() {
+  const btn = document.getElementById('restart-avatar-btn');
+  if (btn) btn.textContent = '🔄 Reconnecting...';
+  
+  if (rtcPeerConnection) {
+    try { rtcPeerConnection.close(); } catch(e) {}
+    rtcPeerConnection = null;
+  }
+  isInitWebRTCActive = false;
+  window.isWebRTCConnected = false;
+  
+  const placeholder = document.getElementById('video-loading-placeholder');
+  if (placeholder) placeholder.style.display = 'flex';
+  
+  await initWebRTC();
+  if (btn) btn.textContent = '📡 Restart Avatar';
+}
+
+let isInitWebRTCActive = false;
+async function initWebRTC() {
+  if (ZOE_NATIVE_MODE) {
+    // No 3D avatar server in the student edition: show the portrait image instead
+    const placeholder = document.getElementById('video-loading-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
+    return;
+  }
+  if (isInitWebRTCActive) return;
+  isInitWebRTCActive = true;
+  try {
+    const iceRes = await fetch(`${window.webrtcServerUrl}/ice-servers`, {
+      headers: { "Bypass-Tunnel-Reminder": "true" }
+    });
+    const iceConfig = await iceRes.json();
+    
+    const avatarsRes = await fetch(`${window.webrtcServerUrl}/avatars`, {
+      headers: { "Bypass-Tunnel-Reminder": "true" }
+    });
+    const avatarsData = await avatarsRes.json();
+    const avatarId = "maria";
+    const bgId = "minimal_office";
+
+    rtcPeerConnection = new RTCPeerConnection({ iceServers: iceConfig.iceServers });
+    
+    rtcPeerConnection.ontrack = (event) => {
+      const stream = event.streams[0];
+      if (portraitVideo.srcObject !== stream) {
+        portraitVideo.srcObject = stream;
+        portraitVideo.muted = false;
+        portraitVideo.volume = 1.0;
+        portraitVideo.play().catch(e => console.log("WebRTC video play:", e));
+      }
+      const audioEl = document.getElementById('webrtc-audio');
+      if (audioEl && audioEl.srcObject !== stream) {
+        audioEl.srcObject = stream;
+        audioEl.muted = false;
+        audioEl.volume = 1.0;
+        audioEl.play().catch(e => console.log("WebRTC audio play:", e));
+      }
+      portraitVideo.style.opacity = '1';
+      window.isWebRTCConnected = true;
+      const placeholder = document.getElementById('video-loading-placeholder');
+      if (placeholder) placeholder.style.display = 'none';
+    };
+    
+    rtcPeerConnection.onconnectionstatechange = () => {
+      if (rtcPeerConnection.connectionState === 'disconnected' ||
+          rtcPeerConnection.connectionState === 'failed' ||
+          rtcPeerConnection.connectionState === 'closed') {
+        window.isWebRTCConnected = false;
+        // Keep video element visible, but it will just freeze or go black
+        const placeholder = document.getElementById('video-loading-placeholder');
+        if (placeholder) placeholder.style.display = 'flex';
+        portraitVideo.style.opacity = '0';
+      }
+    };
+    
+    rtcPeerConnection.addTransceiver('video', { direction: 'recvonly' });
+    rtcPeerConnection.addTransceiver('audio', { direction: 'recvonly' });
+    
+    const offer = await rtcPeerConnection.createOffer();
+    await rtcPeerConnection.setLocalDescription(offer);
+    
+    await new Promise((resolve) => {
+        if (rtcPeerConnection.iceGatheringState === 'complete') resolve();
+        else {
+            const checkState = () => {
+                if (rtcPeerConnection.iceGatheringState === 'complete') {
+                    rtcPeerConnection.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                }
+            };
+            rtcPeerConnection.addEventListener('icegatheringstatechange', checkState);
+            setTimeout(() => { rtcPeerConnection.removeEventListener('icegatheringstatechange', checkState); resolve(); }, 1500);
+        }
+    });
+
+    const response = await fetch(`${window.webrtcServerUrl}/offer`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Bypass-Tunnel-Reminder": "true"
+      },
+      body: JSON.stringify({
+        sdp: rtcPeerConnection.localDescription.sdp,
+        type: rtcPeerConnection.localDescription.type,
+        engine: { type: "polymath" },
+        avatar_id: avatarId,
+        background_id: bgId
+      })
+    });
+    
+    if (!response.ok) {
+        throw new Error("Offer failed: " + await response.text());
+    }
+    
+    const answer = await response.json();
+    await rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    console.log("WebRTC Connected successfully.");
+    window.isWebRTCConnected = true;
+    document.getElementById('status-label').innerText = '';
+  } catch (err) {
+    if (rtcPeerConnection) {
+        rtcPeerConnection.close();
+        rtcPeerConnection = null;
+    }
+    window.isWebRTCConnected = false;
+    const errStr = err.toString();
+    console.warn("WebRTC offer failed:", errStr);
+    
+    if (errStr.includes("Another session is active") || errStr.includes("409")) {
+        // 409: Another session is active - wait 3s and retry, do not restart streamer
+        console.log("WebRTC 409 (Active Session) - waiting 3s to retry...");
+        setTimeout(() => {
+            isInitWebRTCActive = false;
+            initWebRTC();
+        }, 3000);
+    } else {
+        // Other error - retry quickly
+        setTimeout(() => { isInitWebRTCActive = false; initWebRTC(); }, 2000);
+    }
+  }
+}
+
+// Initialize WebRTC connection after a brief delay
+setTimeout(initWebRTC, 1000);
+
+// One-time user gesture unlock for browser Autoplay audio policy
+window.addEventListener('click', () => {
+  const audioEl = document.getElementById('webrtc-audio');
+  if (audioEl) {
+    audioEl.muted = false;
+    audioEl.volume = 1.0;
+    audioEl.play().catch(()=>{});
+  }
+  if (portraitVideo) {
+    portraitVideo.muted = false;
+    portraitVideo.play().catch(()=>{});
+  }
+}, { once: false });
+
+</script>
+</body>
+</html>
