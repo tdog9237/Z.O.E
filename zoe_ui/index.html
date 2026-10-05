@@ -245,7 +245,7 @@
 
 <script>
 // ── Student Edition: native mode (no WebRTC 3D avatar server required) ──
-const ZOE_NATIVE_MODE = true;
+const ZOE_NATIVE_MODE = false;
 
 // ── Skills Registry Modal ─────────────────────────────────
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -659,8 +659,11 @@ async function sendMessage(textOverride){
     // Show which skill or model answered (helps students debug their skills)
     metaDiv.textContent = metaStr + ' · ' + (data.model || 'Z.O.E');
 
-    // Native mode: speak the reply with Edge-TTS through the browser
-    speakText(replyText);
+    // Native mode: speak the reply with Edge-TTS locally.
+    // In WebRTC mode, the WebRTC server streams the photoreal video + audio back.
+    if (ZOE_NATIVE_MODE) {
+        speakText(replyText);
+    }
 
     // Save to history
     // Estimate Z.O.E's speech duration accurately (~170 WPM = ~2.8 words/sec + 400ms lead-out buffer)
