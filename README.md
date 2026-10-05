@@ -1,6 +1,8 @@
 # Z.O.E – Student Edition
 
-Z.O.E (say "Zoe") is a friendly AI assistant that runs **entirely on your own computer**.
+Z.O.E (say "Zoe") is a friendly AI assistant that runs **entirely on your own computer**. 
+**Important Note for Windows Users:** Z.O.E is designed to run its backend server inside **WSL (Windows Subsystem for Linux) using Ubuntu**, while you access the UI through your normal Windows web browser. You must have WSL installed to run this project.
+
 She can chat, speak out loud, recognise your face through your webcam, and answer questions
 using small add-ons called **skills**.
 
