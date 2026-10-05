@@ -1,6 +1,6 @@
 # Z.O.E. Architecture & Capabilities Guide
 
-Welcome to the Z.O.E. (Online Retail Informational System) underlying architecture guide. This document explains how the different parts of Z.O.E. fit together and provides a starter guide on how you can expand her capabilities.
+Welcome to the Z.O.E. underlying architecture guide. This document explains how the different parts of Z.O.E. fit together and provides a starter guide on how you can expand her capabilities.
 
 ## System Architecture Overview
 
@@ -23,8 +23,7 @@ Instead of putting all the logic into one giant file, Z.O.E. uses a modular **Sk
 
 ### 3. The User Interface (`zoe_ui/index.html`)
 The front-end is designed to be a native web app running locally:
-- **No Complex WebRTC/3D Servers Required**: It uses a streamlined CSS-animated portrait interface, keeping the technology stack accessible.
-- **Edge-TTS (Text-to-Speech)**: Handles voice synthesis locally.
+- **WebRTC Neural Avatar Engine**: Seamlessly streams a photorealistic 3D avatar and real-time lip-synced audio from the `avtr-1` streaming server.
 - **JSON-POST endpoints**: Communicates with the core server over simple HTTP APIs (`/chat`, `/api/skills`, `/register_face`).
 
 ---
