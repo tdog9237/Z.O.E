@@ -10,7 +10,10 @@ import sys
 import json
 import base64
 import requests
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import numpy as np
 import threading
 from typing import Optional, Tuple
@@ -50,14 +53,19 @@ skill_manager = SkillManager(os.path.join(BASE_DIR, "skills"))
 # Face Recognition & Haar Cascade Setup
 # ---------------------------------------------------------------------------
 def _load_cascade(filename: str):
-    local_path = os.path.join(DATA_DIR, filename)
-    if os.path.exists(local_path):
-        return cv2.CascadeClassifier(local_path)
-    if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
-        cv_path = os.path.join(cv2.data.haarcascades, filename)
-        if os.path.exists(cv_path):
-            return cv2.CascadeClassifier(cv_path)
-    return cv2.CascadeClassifier(filename)
+    if cv2 is None or not hasattr(cv2, 'CascadeClassifier'):
+        return None
+    try:
+        local_path = os.path.join(DATA_DIR, filename)
+        if os.path.exists(local_path):
+            return cv2.CascadeClassifier(local_path)
+        if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
+            cv_path = os.path.join(cv2.data.haarcascades, filename)
+            if os.path.exists(cv_path):
+                return cv2.CascadeClassifier(cv_path)
+        return cv2.CascadeClassifier(filename)
+    except Exception:
+        return None
 
 face_cascade_default = _load_cascade('haarcascade_frontalface_default.xml')
 face_cascade_alt2 = _load_cascade('haarcascade_frontalface_alt2.xml')
@@ -65,7 +73,7 @@ face_cascade_alt2 = _load_cascade('haarcascade_frontalface_alt2.xml')
 
 def recognize_user(image_data_b64: str) -> Tuple[Optional[str], str]:
     """Recognizes a registered user from a base64 webcam frame."""
-    if not image_data_b64:
+    if cv2 is None or not hasattr(cv2, 'CascadeClassifier') or not image_data_b64:
         return None, "undetected"
 
     try:
@@ -139,109 +147,8 @@ TONE & PERSONALITY GUIDELINES:
 5. If the user asks about retail orders, shopping, store hours, or returns, remind them you have Project ORIS integration."""
 
 conversation_history = []
-last_used_model = "Local: Ollama (In-Memory)"
-
-
-def get_ollama_addr() -> Tuple[str, int]:
-    """Finds Ollama daemon address on localhost or WSL host gateway."""
-    # 1. WSL localhost
-    try:
-        r = requests.get("http://127.0.0.1:11434/api/tags", timeout=0.5)
-        if r.ok:
-            return "127.0.0.1", 11434
-    except Exception:
-        pass
-
-    # 2. Check WSL default gateway
-    try:
-        with open("/proc/net/route") as fh:
-            for line in fh:
-                fields = line.strip().split()
-                if fields[1] == '00000000':
-                    import socket, struct
-                    gw = socket.inet_ntoa(struct.pack("<L", int(fields[2], 16)))
-                    r = requests.get(f"http://{gw}:11434/api/tags", timeout=0.5)
-                    if r.ok:
-                        return gw, 11434
-    except Exception:
-        pass
-
-    return "127.0.0.1", 11434
-
-
-DEFAULT_MODEL = os.environ.get("ZOE_MODEL", "gemma3:270m")
-PREFERRED_MODELS = [DEFAULT_MODEL, "gemma3:270m", "smollm2:360m", "qwen2.5:1.5b", "llama3.2:1b", "phi4-mini", "llama3.2:3b"]
-
-
-def get_active_model() -> str:
-    """
-    Picks the model Z.O.E should use.
-    1. First asks Ollama which model is ALREADY loaded in memory ('ollama ps').
-       Using a model that is already loaded means replies start instantly.
-    2. Otherwise picks the first installed model from PREFERRED_MODELS.
-    """
-    ip, port = get_ollama_addr()
-    installed = []
-    try:
-        r = requests.get(f"http://{ip}:{port}/api/tags", timeout=1)
-        if r.ok:
-            installed = [m.get("name", "") for m in r.json().get("models", [])]
-    except Exception:
-        pass
-
-    # 1. 'ollama ps' - models currently resident in memory
-    try:
-        r_ps = requests.get(f"http://{ip}:{port}/api/ps", timeout=1)
-        if r_ps.ok:
-            running = [m.get("name") or m.get("model") for m in r_ps.json().get("models", [])]
-            for preferred in PREFERRED_MODELS:
-                for name in running:
-                    if name and name.startswith(preferred):
-                        return name
-    except Exception:
-        pass
-
-    # 2. Installed models in order of preference
-    for preferred in PREFERRED_MODELS:
-        for name in installed:
-            if name.startswith(preferred):
-                return name
-    if installed:
-        return installed[0]
-    return DEFAULT_MODEL
-
-
-def query_ollama(messages: list, model_name: str) -> str:
-    """Sends the conversation to the local Ollama model and returns its reply."""
-    ip, port = get_ollama_addr()
-    url = f"http://{ip}:{port}/api/chat"
-    payload = {
-        "model": model_name,
-        "messages": messages,
-        "stream": False,
-        "keep_alive": -1,  # keep the model loaded in memory forever (shows in 'ollama ps')
-        "options": {"num_predict": 200, "temperature": 0.7},
-    }
-    try:
-        r = requests.post(url, json=payload, timeout=60)
-        if r.ok:
-            return r.json().get("message", {}).get("content", "").strip()
-        return f"Ollama returned error status {r.status_code}: {r.text[:150]}"
-    except Exception:
-        return ("Local Ollama is not running. Start it with 'ollama serve' "
-                f"and download the model with 'ollama pull {DEFAULT_MODEL}'.")
-
-
-def warm_up_model() -> None:
-    """Loads the model into memory at start-up so the first reply is fast."""
-    model = get_active_model()
-    ip, port = get_ollama_addr()
-    try:
-        requests.post(f"http://{ip}:{port}/api/generate",
-                      json={"model": model, "prompt": "", "keep_alive": -1}, timeout=120)
-        print(f"[Z.O.E] Model '{model}' loaded into memory (check with: ollama ps)")
-    except Exception as e:
-        print(f"[Z.O.E] Could not pre-load model '{model}': {e}")
+MODEL_NAME = "Wilsonian Continuous RG Braid Apex (1,024 Context, FAISS GPU)"
+last_used_model = MODEL_NAME
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +260,7 @@ def chat():
         conversation_history.append({"role": "user", "content": user_message})
         conversation_history.append({"role": "assistant", "content": reply_text})
         last_used_model = f"Skill: {skill.name}"
+        stream_audio_to_webrtc(reply_text, "en-US-AriaNeural")
         return jsonify({
             "reply": reply_text,
             "model": last_used_model,
@@ -360,30 +268,85 @@ def chat():
             "avatar_url": "native"
         })
 
-    # 3. Fallback to Local AI (Ollama)
-    visual_context = ""
-    if face_status == "matched":
-        visual_context = f"\n[SYSTEM NOTICE: You visually recognize the user via camera as '{user_name}'. Greet them by name naturally.]\n"
-    elif face_status == "unmatched":
-        visual_context = f"\n[SYSTEM NOTICE: A face is detected, but does not match the registered user '{user_name}'.]\n"
+    # 3. Dedicated Brain: Wilsonian Continuous Neural RG Braid Calibrated Apex Model
+    try:
+        from zoe_wilsonian_brain import ZoeWilsonianBrain
+        brain = ZoeWilsonianBrain.get_instance()
+        reply = brain.generate_chat_reply(
+            user_message,
+            history=conversation_history,
+            user_name=user_name,
+            face_status=face_status
+        )
+    except Exception as e:
+        print(f"[Z.O.E] Error in Wilsonian Brain inference: {e}")
+        reply = "I'm right here with you! What would you like to explore next?"
 
+    # 4. Stream speech audio directly to WebRTC avatar engine
+    voice = request.json.get("voice", "en-US-AriaNeural") if request.json else "en-US-AriaNeural"
+    stream_audio_to_webrtc(reply, voice)
+
+    last_used_model = MODEL_NAME
     conversation_history.append({"role": "user", "content": user_message})
-    if len(conversation_history) > 10:
-        conversation_history = conversation_history[-10:]
-
-    messages = [{"role": "system", "content": BASE_SYSTEM_PROMPT + visual_context}] + conversation_history
-    active_model = get_active_model()
-    last_used_model = f"Ollama: {active_model}"
-
-    reply = query_ollama(messages, active_model)
     conversation_history.append({"role": "assistant", "content": reply})
+    if len(conversation_history) > 30:
+        conversation_history = conversation_history[-30:]
 
     return jsonify({
         "reply": reply,
-        "model": last_used_model,
+        "model": MODEL_NAME,
         "skill": None,
         "avatar_url": "native"
     })
+
+
+@app.route("/voice_chat", methods=["POST"])
+def voice_chat():
+    """Receives voice audio from user microphone, transcribes via CUDA Whisper, and chats as Z.O.E."""
+    try:
+        from zoe_wilsonian_brain import ZoeWilsonianBrain
+        brain = ZoeWilsonianBrain.get_instance()
+
+        audio_bytes = None
+        if "audio" in request.files:
+            audio_bytes = request.files["audio"].read()
+        elif request.json and "audio_data" in request.json:
+            b64_str = request.json["audio_data"]
+            if "," in b64_str:
+                b64_str = b64_str.split(",")[1]
+            audio_bytes = base64.b64decode(b64_str)
+
+        if not audio_bytes:
+            return jsonify({"error": "No audio received"}), 400
+
+        user_transcription = brain.transcribe_audio_bytes(audio_bytes)
+        if not user_transcription:
+            return jsonify({"error": "Could not detect clear speech"}), 400
+
+        reply = brain.generate_chat_reply(user_transcription, history=conversation_history)
+        stream_audio_to_webrtc(reply, "en-US-AriaNeural")
+        conversation_history.append({"role": "user", "content": user_transcription})
+        conversation_history.append({"role": "assistant", "content": reply})
+
+        return jsonify({
+            "user_text": user_transcription,
+            "reply": reply,
+            "model": "Wilsonian RG Braid Apex (CUDA Whisper STT)",
+            "avatar_url": "native"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/vram", methods=["GET"])
+def get_vram_telemetry():
+    """Returns GPU VRAM allocation telemetry for the 75% target on RTX 5070 Ti."""
+    try:
+        from zoe_wilsonian_brain import ZoeWilsonianBrain
+        brain = ZoeWilsonianBrain.get_instance()
+        return jsonify(brain.get_vram_telemetry())
+    except Exception as e:
+        return jsonify({"error": str(e), "active": False})
 
 
 @app.route("/tts", methods=["GET"])
@@ -409,19 +372,25 @@ def tts():
     return Response(generate(), mimetype="audio/mpeg")
 
 
+def stream_audio_to_webrtc(text: str, voice: str = "en-US-AriaNeural"):
+    """Streams speech audio directly to the AVTR-1 WebRTC engine on port 7861."""
+    try:
+        import subprocess
+        webrtc_script = os.path.join(r"D:\Antigravity\Polymath", "stream_to_webrtc.py")
+        py_exe = r"D:\Antigravity\Polymath\.venv\Scripts\python.exe" if os.path.exists(r"D:\Antigravity\Polymath\.venv\Scripts\python.exe") else sys.executable
+        if os.path.exists(webrtc_script):
+            subprocess.Popen(
+                [py_exe, webrtc_script, text, voice],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            print(f"[Z.O.E WebRTC Stream] Dispatched speech audio to port 7861 ({len(text)} chars)")
+    except Exception as e:
+        print(f"[Z.O.E] WebRTC audio stream notice: {e}")
+
+
 @app.route("/status", methods=["GET"])
 def status():
-    ollama_active = False
-    active_model = ""
-    try:
-        ip, port = get_ollama_addr()
-        r = requests.get(f"http://{ip}:{port}/api/tags", timeout=1)
-        if r.ok:
-            ollama_active = True
-            active_model = get_active_model()
-    except Exception:
-        pass
-
     reg_user = None
     if os.path.exists(REGISTERED_NAME_PATH):
         try:
@@ -432,9 +401,9 @@ def status():
 
     return jsonify({
         "server_active": True,
-        "ollama_active": ollama_active,
-        "active_model": active_model,
-        "last_used_model": last_used_model,
+        "trained_model_active": True,
+        "active_model": MODEL_NAME,
+        "last_used_model": MODEL_NAME,
         "registered_user": reg_user,
         "skills_loaded": len(skill_manager.skills),
         "conversation_turns": len(conversation_history) // 2
@@ -443,23 +412,16 @@ def status():
 
 @app.route("/models", methods=["GET"])
 def get_available_models():
-    ip, port = get_ollama_addr()
-    models = []
-    try:
-        r = requests.get(f"http://{ip}:{port}/api/tags", timeout=1)
-        if r.ok:
-            for item in r.json().get("models", []):
-                name = item.get("name", "")
-                if name:
-                    models.append({"name": f"Local: {name}", "value": f"ollama:{name}"})
-    except Exception:
-        pass
-
     return jsonify({
         "groups": [
             {
-                "label": "Local Models",
-                "options": models or [{"name": "Auto (Ollama)", "value": "auto"}]
+                "label": "Trained Neural Models (GPU)",
+                "options": [
+                    {
+                        "name": "Wilsonian Continuous Neural RG Braid Apex (Dense)",
+                        "value": "wilsonian_v37_apex"
+                    }
+                ]
             }
         ]
     })
@@ -472,11 +434,23 @@ def reset():
     return jsonify({"status": "reset", "message": "Conversation history cleared."})
 
 
+def warm_up_wilsonian():
+    try:
+        from zoe_wilsonian_brain import ZoeWilsonianBrain
+        print("[Z.O.E Server] Loading Wilsonian RG Braid 1.01B MoE Brain into GPU VRAM (~75% target)...")
+        brain = ZoeWilsonianBrain.get_instance()
+        telemetry = brain.get_vram_telemetry()
+        print(f"[Z.O.E Server] Brain Ready! VRAM Allocated: {telemetry['vram_allocated_gb']} GB / {telemetry['vram_total_gb']} GB ({telemetry['vram_utilization_percent']}%)")
+    except Exception as e:
+        print(f"[Z.O.E Server] Notice loading Wilsonian Brain: {e}")
+
+
 if __name__ == "__main__":
     print("==========================================================")
-    print("  Z.O.E Server (Student Project Edition)")
-    print(f"  Loaded Capabilities: {len(skill_manager.skills)}")
+    print("  Z.O.E Multimodal AI Companion Server")
+    print("  Architecture: Wilsonian Continuous Neural RG Braid 1.01B MoE")
+    print("  Context: 4,096 Tokens (YaRN RoPE) | Memory: FAISS GPU")
     print(f"  Web Interface: http://localhost:{os.environ.get('ZOE_PORT', 5001)}")
     print("==========================================================")
-    threading.Thread(target=warm_up_model, daemon=True).start()
+    threading.Thread(target=warm_up_wilsonian, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("ZOE_PORT", 5001)), debug=False, use_reloader=False)

@@ -659,9 +659,8 @@ async function sendMessage(textOverride){
     // Show which skill or model answered (helps students debug their skills)
     metaDiv.textContent = metaStr + ' · ' + (data.model || 'Z.O.E');
 
-    // Native mode: speak the reply with Edge-TTS locally.
-    // In WebRTC mode, the WebRTC server streams the photoreal video + audio back.
-    if (ZOE_NATIVE_MODE) {
+    // Native mode or standalone: speak the reply with Edge-TTS locally whenever WebRTC avatar is not streaming.
+    if (ZOE_NATIVE_MODE || !window.isWebRTCConnected) {
         speakText(replyText);
     }
 
